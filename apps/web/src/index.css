@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-[#161512] text-[#f0f0f0] font-sans antialiased selection:bg-[#81b64c] selection:text-white;
+    margin: 0;
+    padding: 0;
+  }
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1c1b18;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3c3934;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #504c46;
+}
+
+/* Glassmorphism & Card Styles */
+.chess-card {
+  background: #262522;
+  border: 1px solid #3c3934;
+  border-radius: 0.75rem;
+}
+
+.chess-card-interactive {
+  background: #262522;
+  border: 1px solid #3c3934;
+  border-radius: 0.75rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.chess-card-interactive:hover {
+  background: #2f2d29;
+  border-color: #504c46;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+/* Pulse Animation for Low Time Warning */
+@keyframes low-time-pulse {
+  0%, 100% {
+    background-color: rgba(239, 68, 68, 0.15);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    background-color: rgba(239, 68, 68, 0.35);
+    border-color: rgba(239, 68, 68, 0.9);
+  }
+}
+
+.low-time-warning {
+  animation: low-time-pulse 1s infinite ease-in-out;
+}
+
+/* Shimmer Highlight */
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer-anim 2s infinite;
+}
+
+@keyframes shimmer-anim {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}

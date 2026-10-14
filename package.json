@@ -1,0 +1,26 @@
+{
+  "name": "chess-platform-root",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-grade online chess platform inspired by Chess.com",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev:all",
+    "dev:all": "concurrently -k -n \"server,web\" -c \"cyan,magenta\" \"npm run dev --workspace=@chess/server\" \"npm run dev --workspace=@chess/web\"",
+    "dev:server": "npm run dev --workspace=@chess/server",
+    "dev:web": "npm run dev --workspace=@chess/web",
+    "dev:worker": "npm run dev --workspace=@chess/worker",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "db:migrate": "npm run db:migrate --workspace=@chess/server",
+    "db:seed": "npm run db:seed --workspace=@chess/server",
+    "db:generate": "npm run db:generate --workspace=@chess/server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
+  }
+}
