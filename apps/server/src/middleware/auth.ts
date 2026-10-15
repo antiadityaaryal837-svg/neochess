@@ -13,6 +13,10 @@ export interface AuthUser {
 
 export interface AuthenticatedRequest extends Request {
   user?: AuthUser;
+  params: any;
+  query: any;
+  body: any;
+  ip: any;
 }
 
 export async function authenticateToken(

@@ -1,11 +1,11 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request } from 'express';
 import { prisma } from '../db.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
 // GET /api/tournaments
-router.get('/', async (_req, res: Response) => {
+router.get('/', async (_req: Request, res: Response) => {
   try {
     const tournaments = await prisma.tournament.findMany({
       orderBy: { createdAt: 'desc' },
@@ -22,7 +22,7 @@ router.get('/', async (_req, res: Response) => {
 });
 
 // GET /api/tournaments/:id
-router.get('/:id', async (req, res: Response) => {
+router.get('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 

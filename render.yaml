@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install && npx prisma generate --schema=prisma/schema.postgresql.prisma && npx prisma db push --schema=prisma/schema.postgresql.prisma && npm run build:packages && npm run build:server
+    buildCommand: npm install --include=dev && npx prisma generate --schema=prisma/schema.postgresql.prisma && npx prisma db push --schema=prisma/schema.postgresql.prisma && npm run build:packages && npm run build:server
     startCommand: npm run start --workspace=@chess/server
     healthCheckPath: /api/network-info
     envVars:

@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request } from 'express';
 import { prisma } from '../db.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 
@@ -125,7 +125,7 @@ router.post('/friends/respond', authenticateToken, async (req: AuthenticatedRequ
 });
 
 // GET /api/social/clubs
-router.get('/clubs', async (_req, res: Response) => {
+router.get('/clubs', async (_req: Request, res: Response) => {
   try {
     const clubs = await prisma.club.findMany({
       orderBy: { memberCount: 'desc' },

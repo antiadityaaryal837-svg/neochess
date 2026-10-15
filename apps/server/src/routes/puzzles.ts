@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, Request } from 'express';
 import { prisma } from '../db.js';
 import { authenticateToken, AuthenticatedRequest, optionalAuthenticateToken } from '../middleware/auth.js';
 import { SubmitPuzzleAttemptSchema } from '@chess/shared';
@@ -7,7 +7,7 @@ import { calculatePuzzleRatingChange } from '@chess/chess';
 const router = Router();
 
 // GET /api/puzzles/daily - Today's official daily puzzle
-router.get('/daily', async (_req, res: Response) => {
+router.get('/daily', async (_req: Request, res: Response) => {
   try {
     const totalPuzzles = await prisma.puzzle.count();
     if (totalPuzzles === 0) {
@@ -102,7 +102,7 @@ router.get('/rated', optionalAuthenticateToken, async (req: AuthenticatedRequest
 });
 
 // GET /api/puzzles/random - Random puzzle with optional theme and rating filters
-router.get('/random', async (req, res: Response) => {
+router.get('/random', async (req: Request, res: Response) => {
   try {
     const { theme, minRating, maxRating } = req.query;
 
@@ -152,7 +152,7 @@ router.get('/random', async (req, res: Response) => {
 });
 
 // GET /api/puzzles/rush - Returns 30 puzzles with ascending difficulty for Puzzle Rush
-router.get('/rush', async (_req, res: Response) => {
+router.get('/rush', async (_req: Request, res: Response) => {
   try {
     // Generate an ascending ladder: 400 to 2500 in 15-30 increments
     const puzzles = await prisma.puzzle.findMany({
@@ -177,7 +177,7 @@ router.get('/rush', async (_req, res: Response) => {
 });
 
 // GET /api/puzzles/streak - Puzzle streak ladder
-router.get('/streak', async (_req, res: Response) => {
+router.get('/streak', async (_req: Request, res: Response) => {
   try {
     const puzzles = await prisma.puzzle.findMany({
       orderBy: { rating: 'asc' },
@@ -201,7 +201,7 @@ router.get('/streak', async (_req, res: Response) => {
 });
 
 // GET /api/puzzles/themes - Available tactical themes and summary
-router.get('/themes', async (_req, res: Response) => {
+router.get('/themes', async (_req: Request, res: Response) => {
   try {
     const themesList = [
       { id: 'fork', name: 'Forks', description: 'One piece attacks two or more enemy pieces simultaneously' },
@@ -343,7 +343,7 @@ router.post('/rush-score', authenticateToken, async (req: AuthenticatedRequest, 
 });
 
 // GET /api/puzzles/leaderboard - Puzzle Leaderboards
-router.get('/leaderboard', async (_req, res: Response) => {
+router.get('/leaderboard', async (_req: Request, res: Response) => {
   try {
     const topRatings = await prisma.rating.findMany({
       orderBy: { puzzles: 'desc' },

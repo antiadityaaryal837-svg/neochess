@@ -22,8 +22,10 @@
     "db:seed": "npm run db:seed --workspace=@chess/server",
     "db:generate": "npm run db:generate --workspace=@chess/server"
   },
-  "devDependencies": {
-    "concurrently": "^8.2.2",
+  "dependencies": {
     "typescript": "^5.4.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
   }
 }
