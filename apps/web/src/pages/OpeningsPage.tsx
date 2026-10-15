@@ -8,7 +8,7 @@ export const OpeningsPage: React.FC = () => {
   const [search, setSearch] = useState('');
 
   const filtered = POPULAR_OPENINGS.filter(
-    (o) =>
+    (o: OpeningData) =>
       o.name.toLowerCase().includes(search.toLowerCase()) ||
       o.eco.toLowerCase().includes(search.toLowerCase())
   );
@@ -39,7 +39,7 @@ export const OpeningsPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left: Opening List (5 cols) */}
         <div className="lg:col-span-5 space-y-2.5">
-          {filtered.map((op) => {
+          {filtered.map((op: OpeningData) => {
             const isSelected = selectedOpening.eco === op.eco;
             return (
               <div

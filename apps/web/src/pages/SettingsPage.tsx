@@ -97,7 +97,7 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {Object.entries(BOARD_THEMES).map(([key, t]) => {
+            {Object.entries(BOARD_THEMES).map(([key, t]: [string, any]) => {
               const isSelected = boardTheme === key;
               return (
                 <button
@@ -141,7 +141,7 @@ export const SettingsPage: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {Object.entries(PIECE_THEMES).map(([key, p]) => {
+            {Object.entries(PIECE_THEMES).map(([key, p]: [string, any]) => {
               const isSelected = pieceTheme === key;
               return (
                 <button

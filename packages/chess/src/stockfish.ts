@@ -185,6 +185,7 @@ export class StockfishEngine {
 
     this.isReadyPromise = (async () => {
       try {
+        // @ts-ignore
         const stockfishModule = await import('stockfish');
         const factory: StockfishFactory = (stockfishModule as any).default || stockfishModule;
 

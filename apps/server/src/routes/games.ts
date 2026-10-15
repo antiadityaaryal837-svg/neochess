@@ -125,7 +125,7 @@ router.post('/', optionalAuthenticateToken, async (req: AuthenticatedRequest, re
     let isComputerOpponent = opponentType === 'computer';
     let botPersona = BOT_PERSONAS[0];
     if (isComputerOpponent && botId) {
-      const found = BOT_PERSONAS.find((b) => b.id === botId);
+      const found = BOT_PERSONAS.find((b: any) => b.id === botId);
       if (found) botPersona = found;
     }
 

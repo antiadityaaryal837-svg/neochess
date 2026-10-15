@@ -642,7 +642,7 @@ export const AnalysisPage: React.FC = () => {
               </div>
 
               <div className="divide-y divide-[#312e2b]">
-                {Object.entries(CLASSIFICATION_METADATA).map(([key, meta]) => {
+                {Object.entries(CLASSIFICATION_METADATA).map(([key, meta]: [string, any]) => {
                   const whiteCount = classificationCounts?.white?.[key] || 0;
                   const blackCount = classificationCounts?.black?.[key] || 0;
 

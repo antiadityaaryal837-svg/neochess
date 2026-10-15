@@ -819,11 +819,11 @@ async function scheduleBotMove(room: ActiveRoom, io: Server) {
   // Calibrate engine parameters based on bot persona rating & settings
   const botPersona =
     BOT_PERSONAS.find(
-      (p) =>
+      (p: any) =>
         (botPlayer.username && p.name.toLowerCase() === botPlayer.username.toLowerCase()) ||
         p.id === botPlayer.id
     ) ||
-    BOT_PERSONAS.find((p) => Math.abs(p.rating - (botPlayer.rating || 1200)) < 150) ||
+    BOT_PERSONAS.find((p: any) => Math.abs(p.rating - (botPlayer.rating || 1200)) < 150) ||
     BOT_PERSONAS[0];
 
   const baseThinking = botPersona.thinkingMs || 700;

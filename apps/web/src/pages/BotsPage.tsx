@@ -11,7 +11,7 @@ export const BotsPage: React.FC = () => {
 
   const filteredBots = selectedCategory === 'all'
     ? BOT_PERSONAS
-    : BOT_PERSONAS.filter((b) => b.category === selectedCategory);
+    : BOT_PERSONAS.filter((b: BotPersona) => b.category === selectedCategory);
 
   const handleStartGame = () => {
     navigate(`/play?bot=${selectedBot.id}&color=${color}`);
@@ -48,7 +48,7 @@ export const BotsPage: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
         {/* Bots Grid (2 cols) */}
         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {filteredBots.map((bot) => {
+          {filteredBots.map((bot: BotPersona) => {
             const isSelected = selectedBot.id === bot.id;
             return (
               <div

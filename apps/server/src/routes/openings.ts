@@ -13,7 +13,7 @@ router.get('/lookup', (req: Request, res: Response) => {
   const fen = (req.query.fen as string) || '';
   const cleanFenPrefix = fen.split(' ')[0]; // compare board position part
 
-  const matched = POPULAR_OPENINGS.find((o) => {
+  const matched = POPULAR_OPENINGS.find((o: any) => {
     const openingFenPrefix = o.fen.split(' ')[0];
     return openingFenPrefix === cleanFenPrefix;
   });

@@ -7,6 +7,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@chess/shared': path.resolve(__dirname, '../../packages/shared/src/index.ts'),
+      '@chess/chess': path.resolve(__dirname, '../../packages/chess/src/index.ts'),
     },
   },
   server: {
