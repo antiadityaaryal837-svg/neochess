@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: neochess-server
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install && npx prisma generate --schema=prisma/schema.postgresql.prisma && npx prisma db push --schema=prisma/schema.postgresql.prisma && npm run build:packages && npm run build:server
+    startCommand: npm run start --workspace=@chess/server
+    healthCheckPath: /api/network-info
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: neochess-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CLIENT_URL
+        value: https://*
+
+databases:
+  - name: neochess-db
+    plan: free
+    region: oregon
+    databaseName: neochess
+    user: chess_user
