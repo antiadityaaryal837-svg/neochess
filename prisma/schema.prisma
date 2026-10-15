@@ -28,6 +28,7 @@ model User {
   blackGames     Game[]          @relation("BlackGames")
   
   puzzleAttempts PuzzleAttempt[]
+  puzzleRushScores PuzzleRushScore[]
   lessonProgress LessonProgress[]
   
   tournamentsCreated Tournament[] @relation("CreatedTournaments")
@@ -35,6 +36,7 @@ model User {
   
   clubsOwned     Club[]          @relation("ClubOwner")
   clubMemberships ClubMembership[]
+  clubAnnouncements ClubAnnouncement[]
   
   sentFriendRequests     Friendship[]   @relation("FriendSender")
   receivedFriendRequests Friendship[]   @relation("FriendReceiver")
@@ -176,6 +178,7 @@ model GameMove {
   timeSpentMs          Int      @default(0)
   classification       String?  // 'blunder', 'mistake', 'inaccuracy', 'best', 'brilliant', etc.
   evalScore            Int?     // Centipawns
+  bestMove             String?  // Engine best move recommendation
   createdAt            DateTime @default(now())
 
   @@index([gameId, moveNumber])
@@ -219,6 +222,18 @@ model PuzzleAttempt {
   ratingChange      Int
   createdAt         DateTime @default(now())
 
+  @@index([userId])
+}
+
+model PuzzleRushScore {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score     Int
+  mode      String   @default("3min") // '3min' | '5min' | 'survival'
+  createdAt DateTime @default(now())
+
+  @@index([mode, score])
   @@index([userId])
 }
 
@@ -308,7 +323,8 @@ model Club {
   memberCount Int              @default(1)
   createdAt   DateTime         @default(now())
 
-  members     ClubMembership[]
+  members       ClubMembership[]
+  announcements ClubAnnouncement[]
 }
 
 model ClubMembership {
@@ -321,6 +337,19 @@ model ClubMembership {
   joinedAt DateTime @default(now())
 
   @@unique([clubId, userId])
+}
+
+model ClubAnnouncement {
+  id        String   @id @default(uuid())
+  clubId    String
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([clubId, createdAt])
 }
 
 model Friendship {
@@ -403,4 +432,25 @@ model Subscription {
   startDate DateTime @default(now())
   endDate   DateTime
   autoRenew Boolean  @default(true)
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  adminId    String
+  action     String
+  targetType String
+  targetId   String?
+  details    String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+}
+
+model PlatformConfig {
+  key         String   @id
+  value       String
+  category    String   @default("general")
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
 }

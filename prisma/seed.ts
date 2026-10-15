@@ -160,7 +160,14 @@ async function main() {
   for (const les of SEED_LESSONS) {
     await prisma.lesson.upsert({
       where: { slug: les.slug },
-      update: {},
+      update: {
+        title: les.title,
+        description: les.description,
+        category: les.category,
+        icon: les.icon,
+        orderIndex: les.order,
+        stepsJson: JSON.stringify(les.steps),
+      },
       create: {
         id: les.id,
         slug: les.slug,

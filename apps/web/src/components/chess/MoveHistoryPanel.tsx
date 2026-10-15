@@ -44,26 +44,56 @@ export const MoveHistoryPanel: React.FC<MoveHistoryPanelProps> = ({
     switch (cls) {
       case 'brilliant':
         return (
-          <span title="Brilliant Move" className="inline ml-1">
-            <Sparkles size={12} className="text-cyan-400 inline" />
+          <span title="Brilliant Move (!!" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-cyan-900/60 text-cyan-300 text-[9px] font-black">
+            !!
+          </span>
+        );
+      case 'great':
+        return (
+          <span title="Great Move (!)" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-blue-900/60 text-blue-300 text-[9px] font-black">
+            !
           </span>
         );
       case 'best':
         return (
-          <span title="Best Move" className="inline ml-1">
-            <CheckCircle size={12} className="text-[#81b64c] inline" />
+          <span title="Best Move (★)" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-[#81b64c]/30 text-[#95c65a] text-[9px] font-black">
+            ★
           </span>
         );
-      case 'blunder':
+      case 'excellent':
         return (
-          <span title="Blunder" className="inline ml-1">
-            <AlertTriangle size={12} className="text-red-500 inline" />
+          <span title="Excellent Move" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-emerald-900/40 text-emerald-300 text-[9px] font-black">
+            ✓
+          </span>
+        );
+      case 'book':
+        return (
+          <span title="Book Opening Move" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-amber-900/40 text-amber-300 text-[9px] font-black">
+            📖
+          </span>
+        );
+      case 'inaccuracy':
+        return (
+          <span title="Inaccuracy (?!)" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-amber-900/60 text-amber-300 text-[9px] font-black">
+            ?!
           </span>
         );
       case 'mistake':
         return (
-          <span title="Mistake" className="inline ml-1">
-            <AlertCircle size={12} className="text-amber-500 inline" />
+          <span title="Mistake (?)" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-orange-900/60 text-orange-300 text-[9px] font-black">
+            ?
+          </span>
+        );
+      case 'blunder':
+        return (
+          <span title="Blunder (??)" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-red-900/70 text-red-300 text-[9px] font-black">
+            ??
+          </span>
+        );
+      case 'missed_win':
+        return (
+          <span title="Missed Win" className="inline-flex items-center ml-1 px-1 py-0.2 rounded bg-purple-900/70 text-purple-300 text-[9px] font-black">
+            ✕
           </span>
         );
       default:

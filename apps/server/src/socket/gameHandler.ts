@@ -1,6 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import { prisma } from '../db.js';
-import { ChessGameEngine, calculateMatchRatings } from '@chess/chess';
+import { ChessGameEngine, calculateMatchRatings, getStockfishEngine } from '@chess/chess';
 import {
   ChessMoveRecord,
   GameResult,
@@ -48,12 +48,90 @@ interface MatchQueueEntry {
 
 const matchmakingQueues = new Map<string, MatchQueueEntry[]>();
 
+export interface OnlinePlayerInfo {
+  socketId: string;
+  userId: string;
+  username: string;
+  rating: number;
+  status: 'available' | 'in_game';
+  isLocalNetwork: boolean;
+  clientIp: string;
+  avatarUrl?: string;
+  title?: string;
+  connectedAt: number;
+}
+
+export interface DirectInvitation {
+  id: string;
+  fromUserId: string;
+  fromUsername: string;
+  fromSocketId: string;
+  fromRating: number;
+  toUserId: string;
+  toUsername: string;
+  toSocketId: string;
+  timeControl: string;
+  rated: boolean;
+  createdAt: number;
+  expiresAt: number;
+  timer?: NodeJS.Timeout;
+}
+
+const onlinePlayers = new Map<string, OnlinePlayerInfo>();
+const directInvitations = new Map<string, DirectInvitation>();
+
+export function isPrivateIp(ip?: string): boolean {
+  if (!ip) return false;
+  const cleanIp = ip.replace(/^::ffff:/, '').trim();
+  if (cleanIp === '127.0.0.1' || cleanIp === '::1' || cleanIp === 'localhost') return true;
+  if (cleanIp.startsWith('192.168.') || cleanIp.startsWith('10.')) return true;
+  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(cleanIp)) return true;
+  return false;
+}
+
+export function broadcastLobbyPlayers(io: Server) {
+  const players = Array.from(onlinePlayers.values()).map((p) => ({
+    userId: p.userId,
+    username: p.username,
+    rating: p.rating,
+    status: p.status,
+    isLocalNetwork: p.isLocalNetwork,
+    avatarUrl: p.avatarUrl,
+    title: p.title,
+    connectedAt: p.connectedAt,
+  }));
+  io.emit('lobby:players_updated', { players });
+}
+
 export function setupSocketGameHandlers(io: Server) {
   io.on('connection', (socket: Socket) => {
-    let currentUserId: string | null = null;
-    let currentUsername: string | null = null;
+    const clientIp = (socket.handshake.address || (socket.conn as any)?.remoteAddress || '').replace(/^::ffff:/, '');
+    const isLocal = isPrivateIp(clientIp);
 
-    // 1. Authenticate / Identify Socket
+    // Initial guest presence registration so every connected user is immediately visible in the lobby
+    const defaultGuestId = `guest_${socket.id.substring(0, 6)}`;
+    const defaultGuestName = `Guest_${socket.id.substring(0, 4)}`;
+    socket.data.userId = defaultGuestId;
+    socket.data.username = defaultGuestName;
+
+    onlinePlayers.set(socket.id, {
+      socketId: socket.id,
+      userId: defaultGuestId,
+      username: defaultGuestName,
+      rating: 1200,
+      status: 'available',
+      isLocalNetwork: isLocal,
+      clientIp,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${socket.id}`,
+      connectedAt: Date.now(),
+    });
+
+    broadcastLobbyPlayers(io);
+
+    let currentUserId: string = defaultGuestId;
+    let currentUsername: string = defaultGuestName;
+
+    // 1. Authenticate / Identify Socket & Upgrade Presence in Online Lobby
     socket.on('auth:identify', async (data: { userId?: string; username?: string }) => {
       if (data?.userId) {
         currentUserId = data.userId;
@@ -61,10 +139,240 @@ export function setupSocketGameHandlers(io: Server) {
         socket.data.userId = currentUserId;
         socket.data.username = currentUsername;
 
-        // Update profile online status
-        await prisma.profile.updateMany({
-          where: { userId: currentUserId },
-          data: { isOnline: true, lastSeenAt: new Date() },
+        // Fetch user profile and blitz rating for lobby if registered user
+        let avatarUrl: string | undefined = undefined;
+        let title: string | undefined = undefined;
+        let rating = 1200;
+
+        if (!currentUserId.startsWith('guest_')) {
+          const [profile, ratingRec] = await Promise.all([
+            prisma.profile.findUnique({ where: { userId: currentUserId } }),
+            prisma.rating.findUnique({ where: { userId: currentUserId } }),
+          ]);
+          avatarUrl = profile?.avatarUrl || undefined;
+          title = profile?.title || undefined;
+          rating = ratingRec?.blitz || 1200;
+
+          // Update profile online status
+          await prisma.profile.updateMany({
+            where: { userId: currentUserId },
+            data: { isOnline: true, lastSeenAt: new Date() },
+          });
+        }
+
+        onlinePlayers.set(socket.id, {
+          socketId: socket.id,
+          userId: currentUserId,
+          username: currentUsername,
+          rating,
+          status: 'available',
+          isLocalNetwork: isLocal,
+          clientIp,
+          avatarUrl,
+          title,
+          connectedAt: Date.now(),
+        });
+
+        broadcastLobbyPlayers(io);
+      }
+    });
+
+    // 1.1 Lobby Query
+    socket.on('lobby:get_players', () => {
+      const players = Array.from(onlinePlayers.values()).map((p) => ({
+        userId: p.userId,
+        username: p.username,
+        rating: p.rating,
+        status: p.status,
+        isLocalNetwork: p.isLocalNetwork,
+        avatarUrl: p.avatarUrl,
+        title: p.title,
+        connectedAt: p.connectedAt,
+        isSelf: p.socketId === socket.id || p.userId === socket.data.userId,
+      }));
+      socket.emit('lobby:players_list', { players });
+    });
+
+    // 1.2 Direct Game Invitations
+    socket.on('invite:send', async (data: { toUserId: string; timeControl?: string; rated?: boolean }) => {
+      const targetPlayer = Array.from(onlinePlayers.values()).find((p) => p.userId === data.toUserId);
+      if (!targetPlayer) {
+        socket.emit('invite:error', { message: 'Player is no longer online' });
+        return;
+      }
+      if (targetPlayer.status === 'in_game') {
+        socket.emit('invite:error', { message: 'Player is currently playing a game' });
+        return;
+      }
+      if (targetPlayer.userId === socket.data.userId || targetPlayer.socketId === socket.id) {
+        socket.emit('invite:error', { message: 'Cannot invite yourself' });
+        return;
+      }
+
+      // Check if an existing invite is already pending between these players
+      const hasPending = Array.from(directInvitations.values()).some(
+        (inv) =>
+          (inv.fromSocketId === socket.id && inv.toSocketId === targetPlayer.socketId) ||
+          (inv.fromSocketId === targetPlayer.socketId && inv.toSocketId === socket.id)
+      );
+      if (hasPending) {
+        socket.emit('invite:error', { message: 'A challenge is already pending with this player' });
+        return;
+      }
+
+      const invitationId = `inv_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const tc = data.timeControl || '3+0';
+      const rated = data.rated !== false;
+
+      const invitation: DirectInvitation = {
+        id: invitationId,
+        fromUserId: socket.data.userId || socket.id,
+        fromUsername: socket.data.username || 'Anonymous',
+        fromSocketId: socket.id,
+        fromRating: onlinePlayers.get(socket.id)?.rating || 1200,
+        toUserId: targetPlayer.userId,
+        toUsername: targetPlayer.username,
+        toSocketId: targetPlayer.socketId,
+        timeControl: tc,
+        rated,
+        createdAt: Date.now(),
+        expiresAt: Date.now() + 30000,
+      };
+
+      invitation.timer = setTimeout(() => {
+        directInvitations.delete(invitationId);
+        io.to(invitation.fromSocketId).emit('invite:expired', { invitationId });
+        io.to(invitation.toSocketId).emit('invite:expired', { invitationId });
+      }, 30000);
+
+      directInvitations.set(invitationId, invitation);
+
+      // Send to recipient
+      io.to(targetPlayer.socketId).emit('invite:received', {
+        invitationId,
+        fromUserId: invitation.fromUserId,
+        fromUsername: invitation.fromUsername,
+        fromRating: invitation.fromRating,
+        timeControl: invitation.timeControl,
+        rated: invitation.rated,
+        expiresAt: invitation.expiresAt,
+        isLocalNetwork: targetPlayer.isLocalNetwork && isPrivateIp(socket.handshake.address),
+      });
+
+      // Confirm to sender
+      socket.emit('invite:sent', {
+        invitationId,
+        toUserId: targetPlayer.userId,
+        toUsername: targetPlayer.username,
+        expiresAt: invitation.expiresAt,
+      });
+    });
+
+    socket.on('invite:accept', async (data: { invitationId: string }) => {
+      const invitation = directInvitations.get(data.invitationId);
+      if (!invitation) {
+        socket.emit('invite:error', { message: 'Invitation has expired or was cancelled' });
+        return;
+      }
+
+      if (invitation.timer) clearTimeout(invitation.timer);
+      directInvitations.delete(data.invitationId);
+
+      const tcConfig = STANDARD_TIME_CONTROLS[invitation.timeControl] || STANDARD_TIME_CONTROLS['3+0'];
+      const isWhite = Math.random() < 0.5;
+
+      const whiteSocketId = isWhite ? invitation.fromSocketId : invitation.toSocketId;
+      const blackSocketId = isWhite ? invitation.toSocketId : invitation.fromSocketId;
+      const whiteUserId = isWhite ? invitation.fromUserId : invitation.toUserId;
+      const blackUserId = isWhite ? invitation.toUserId : invitation.fromUserId;
+      const whiteUsername = isWhite ? invitation.fromUsername : invitation.toUsername;
+      const blackUsername = isWhite ? invitation.toUsername : invitation.fromUsername;
+      const whiteRating = isWhite ? invitation.fromRating : (onlinePlayers.get(invitation.toSocketId)?.rating || 1200);
+      const blackRating = isWhite ? (onlinePlayers.get(invitation.toSocketId)?.rating || 1200) : invitation.fromRating;
+
+      try {
+        const game = await prisma.game.create({
+          data: {
+            fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+            variant: 'standard',
+            timeControl: invitation.timeControl,
+            baseSeconds: tcConfig.baseSeconds,
+            incrementSeconds: tcConfig.incrementSeconds,
+            rated: invitation.rated,
+            status: 'in_progress',
+            whitePlayerId: whiteUserId.startsWith('guest_') || whiteUserId === whiteSocketId ? null : whiteUserId,
+            whiteRating,
+            blackPlayerId: blackUserId.startsWith('guest_') || blackUserId === blackSocketId ? null : blackUserId,
+            blackRating,
+          },
+        });
+
+        const room: ActiveRoom = {
+          id: game.id,
+          engine: new ChessGameEngine('standard'),
+          whitePlayer: { id: whiteUserId, username: whiteUsername, rating: whiteRating, socketId: whiteSocketId },
+          blackPlayer: { id: blackUserId, username: blackUsername, rating: blackRating, socketId: blackSocketId },
+          whiteTimeMs: tcConfig.baseSeconds * 1000,
+          blackTimeMs: tcConfig.baseSeconds * 1000,
+          baseSeconds: tcConfig.baseSeconds,
+          incrementSeconds: tcConfig.incrementSeconds,
+          timeControl: invitation.timeControl,
+          rated: invitation.rated,
+          status: 'in_progress',
+          result: '*',
+          lastMoveTimestamp: Date.now(),
+          spectators: new Set(),
+        };
+
+        activeRooms.set(game.id, room);
+
+        const p1 = onlinePlayers.get(invitation.fromSocketId);
+        if (p1) p1.status = 'in_game';
+        const p2 = onlinePlayers.get(invitation.toSocketId);
+        if (p2) p2.status = 'in_game';
+        broadcastLobbyPlayers(io);
+
+        io.sockets.sockets.get(whiteSocketId)?.join(game.id);
+        io.sockets.sockets.get(blackSocketId)?.join(game.id);
+
+        io.to(whiteSocketId).emit('game:matched', {
+          gameId: game.id,
+          color: 'w',
+          opponent: { username: blackUsername, rating: blackRating },
+          timeControl: tcConfig,
+        });
+
+        io.to(blackSocketId).emit('game:matched', {
+          gameId: game.id,
+          color: 'b',
+          opponent: { username: whiteUsername, rating: whiteRating },
+          timeControl: tcConfig,
+        });
+      } catch (err) {
+        console.error('Failed to create invitation game:', err);
+        socket.emit('invite:error', { message: 'Failed to initialize game' });
+      }
+    });
+
+    socket.on('invite:decline', (data: { invitationId: string }) => {
+      const invitation = directInvitations.get(data.invitationId);
+      if (invitation) {
+        if (invitation.timer) clearTimeout(invitation.timer);
+        directInvitations.delete(data.invitationId);
+        io.to(invitation.fromSocketId).emit('invite:declined', {
+          invitationId: data.invitationId,
+          byUsername: socket.data.username || 'Opponent',
+        });
+      }
+    });
+
+    socket.on('invite:cancel', (data: { invitationId: string }) => {
+      const invitation = directInvitations.get(data.invitationId);
+      if (invitation) {
+        if (invitation.timer) clearTimeout(invitation.timer);
+        directInvitations.delete(data.invitationId);
+        io.to(invitation.toSocketId).emit('invite:cancelled', {
+          invitationId: data.invitationId,
         });
       }
     });
@@ -420,14 +728,42 @@ export function setupSocketGameHandlers(io: Server) {
     });
 
     // 10. Disconnect Handling
-    socket.on('disconnect', () => {
-      // Remove from matchmaking queues
+    socket.on('disconnect', async () => {
+      // 1. Remove from matchmaking queues
       for (const queue of matchmakingQueues.values()) {
         const idx = queue.findIndex((e) => e.socket.id === socket.id);
         if (idx !== -1) queue.splice(idx, 1);
       }
 
-      // Check if player was in an active room
+      // 2. Clean up direct invitations
+      for (const [invId, inv] of directInvitations.entries()) {
+        if (inv.fromSocketId === socket.id) {
+          if (inv.timer) clearTimeout(inv.timer);
+          io.to(inv.toSocketId).emit('invite:cancelled', { invitationId: invId });
+          directInvitations.delete(invId);
+        } else if (inv.toSocketId === socket.id) {
+          if (inv.timer) clearTimeout(inv.timer);
+          io.to(inv.fromSocketId).emit('invite:declined', { invitationId: invId, byUsername: inv.toUsername });
+          directInvitations.delete(invId);
+        }
+      }
+
+      // 3. Remove from online players
+      if (onlinePlayers.has(socket.id)) {
+        const p = onlinePlayers.get(socket.id)!;
+        onlinePlayers.delete(socket.id);
+
+        const hasOtherSockets = Array.from(onlinePlayers.values()).some((other) => other.userId === p.userId);
+        if (!hasOtherSockets && p.userId) {
+          await prisma.profile.updateMany({
+            where: { userId: p.userId },
+            data: { isOnline: false, lastSeenAt: new Date() },
+          });
+        }
+        broadcastLobbyPlayers(io);
+      }
+
+      // 4. Check if player was in an active room
       for (const room of activeRooms.values()) {
         if (room.spectators.has(socket.id)) {
           room.spectators.delete(socket.id);
@@ -477,54 +813,52 @@ function startRoomClock(room: ActiveRoom, io: Server) {
 }
 
 async function scheduleBotMove(room: ActiveRoom, io: Server) {
-  // Realistic thinking delay between 500ms and 1400ms
-  const delay = Math.floor(500 + Math.random() * 800);
+  const turn = room.engine.getTurn();
+  const botPlayer = turn === 'w' ? room.whitePlayer : room.blackPlayer;
+
+  // Calibrate engine parameters based on bot persona rating & settings
+  const botPersona =
+    BOT_PERSONAS.find(
+      (p) =>
+        (botPlayer.username && p.name.toLowerCase() === botPlayer.username.toLowerCase()) ||
+        p.id === botPlayer.id
+    ) ||
+    BOT_PERSONAS.find((p) => Math.abs(p.rating - (botPlayer.rating || 1200)) < 150) ||
+    BOT_PERSONAS[0];
+
+  const baseThinking = botPersona.thinkingMs || 700;
+  // Natural human-like variable thinking delay
+  const delay = Math.floor(baseThinking * 0.75 + Math.random() * (baseThinking * 0.5));
 
   setTimeout(async () => {
     if (room.status !== 'in_progress') return;
 
-    const legalMoves = room.engine.getLegalMoves();
-    if (legalMoves.length === 0) return;
-
-    // Tactical bot move selection:
-    // Prioritize checkmates, checks, and captures
-    let chosenMove = legalMoves[0];
-    const checkmateMoves = legalMoves.filter((m) => m.includes('#'));
-    const captureMoves = legalMoves.filter((m) => m.includes('x'));
-    const checkMoves = legalMoves.filter((m) => m.includes('+'));
-
-    if (checkmateMoves.length > 0) {
-      chosenMove = checkmateMoves[0];
-    } else if (captureMoves.length > 0 && Math.random() > 0.3) {
-      chosenMove = captureMoves[Math.floor(Math.random() * captureMoves.length)];
-    } else if (checkMoves.length > 0 && Math.random() > 0.4) {
-      chosenMove = checkMoves[Math.floor(Math.random() * checkMoves.length)];
-    } else {
-      chosenMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
-    }
-
-    // Convert SAN to move execution on engine
     try {
+      const fen = room.engine.getFen();
+      const sf = getStockfishEngine();
+
+      // Calculate move using genuine Stockfish with calibrated skill level, depth, and UCI_Elo
+      const botMove = await sf.getBotMove(fen, {
+        skillLevel: botPersona.skillLevel,
+        depth: botPersona.depth,
+        uciElo: botPersona.uciElo || botPersona.rating,
+        blunderPercent: botPersona.blunderPercent,
+      });
+
       const now = Date.now();
       const elapsedMs = Math.max(0, now - room.lastMoveTimestamp);
       room.lastMoveTimestamp = now;
 
-      const turn = room.engine.getTurn();
       if (turn === 'w') {
         room.whiteTimeMs = Math.max(0, room.whiteTimeMs - elapsedMs) + room.incrementSeconds * 1000;
       } else {
         room.blackTimeMs = Math.max(0, room.blackTimeMs - elapsedMs) + room.incrementSeconds * 1000;
       }
 
-      // Temporary chess helper to find from/to coordinates for the SAN
-      const tempChess = new (await import('chess.js')).Chess(room.engine.getFen());
-      const res = tempChess.move(chosenMove);
-      if (!res) return;
-
       const moveResult = room.engine.makeMove(
-        res.from,
-        res.to,
-        res.promotion as any,
+        botMove.from,
+        botMove.to,
+        botMove.promotion as any,
         room.whiteTimeMs,
         room.blackTimeMs,
         elapsedMs
@@ -615,9 +949,18 @@ async function endGame(
 
     try {
       await prisma.$transaction([
-        prisma.rating.update({
+        prisma.rating.upsert({
           where: { userId: room.whitePlayer.id },
-          data: { [tcField]: ratingChanges.playerNewRating },
+          create: {
+            userId: room.whitePlayer.id,
+            bullet: 1200,
+            blitz: 1200,
+            rapid: 1200,
+            classical: 1200,
+            puzzles: 1200,
+            [tcField]: ratingChanges.playerNewRating,
+          },
+          update: { [tcField]: ratingChanges.playerNewRating },
         }),
         prisma.ratingHistory.create({
           data: {
@@ -628,9 +971,18 @@ async function endGame(
             gameId: room.id,
           },
         }),
-        prisma.rating.update({
+        prisma.rating.upsert({
           where: { userId: room.blackPlayer.id },
-          data: { [tcField]: ratingChanges.opponentNewRating },
+          create: {
+            userId: room.blackPlayer.id,
+            bullet: 1200,
+            blitz: 1200,
+            rapid: 1200,
+            classical: 1200,
+            puzzles: 1200,
+            [tcField]: ratingChanges.opponentNewRating,
+          },
+          update: { [tcField]: ratingChanges.opponentNewRating },
         }),
         prisma.ratingHistory.create({
           data: {
@@ -670,6 +1022,15 @@ async function endGame(
     whiteRatingDelta,
     blackRatingDelta,
   });
+
+  // Reset players status in lobby
+  if (room.whitePlayer?.socketId && onlinePlayers.has(room.whitePlayer.socketId)) {
+    onlinePlayers.get(room.whitePlayer.socketId)!.status = 'available';
+  }
+  if (room.blackPlayer?.socketId && onlinePlayers.has(room.blackPlayer.socketId)) {
+    onlinePlayers.get(room.blackPlayer.socketId)!.status = 'available';
+  }
+  broadcastLobbyPlayers(io);
 }
 
 function emitRoomState(room: ActiveRoom, socket: Socket) {

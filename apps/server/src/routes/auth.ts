@@ -273,4 +273,181 @@ router.put('/preferences', authenticateToken, async (req: AuthenticatedRequest, 
   }
 });
 
+// GET /api/auth/google/config
+router.get('/google/config', (_req: Request, res: Response) => {
+  return res.json({
+    enabled: Boolean(config.googleClientId),
+    clientId: config.googleClientId || null,
+  });
+});
+
+// POST /api/auth/google - Authenticate with Google ID Token / OpenID Connect
+router.post('/google', async (req: Request, res: Response) => {
+  try {
+    const { credential, code, redirectUri } = req.body;
+
+    if (!credential && !code) {
+      return res.status(400).json({ error: 'Google credential or authorization code is required' });
+    }
+
+    let email = '';
+    let emailVerified = false;
+    let name = '';
+    let picture = '';
+
+    if (credential) {
+      // 1. Verify Google ID Token via Google's tokeninfo API
+      const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+      const tokenInfo: any = await verifyRes.json();
+
+      if (!verifyRes.ok || !tokenInfo.email) {
+        return res.status(401).json({ error: tokenInfo.error_description || 'Invalid or expired Google credential' });
+      }
+
+      // Check audience if client ID is configured
+      if (config.googleClientId && tokenInfo.aud !== config.googleClientId) {
+        return res.status(401).json({ error: 'Google ID token audience mismatch' });
+      }
+
+      email = tokenInfo.email;
+      emailVerified = tokenInfo.email_verified === 'true' || tokenInfo.email_verified === true;
+      name = tokenInfo.name || tokenInfo.given_name || '';
+      picture = tokenInfo.picture || '';
+    } else if (code) {
+      // 2. Exchange authorization code for tokens
+      if (!config.googleClientId || !config.googleClientSecret) {
+        return res.status(400).json({ error: 'Server Google OAuth credentials are not fully configured' });
+      }
+
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: config.googleClientId,
+          client_secret: config.googleClientSecret,
+          redirect_uri: redirectUri || `${config.clientUrl}/auth/callback`,
+          grant_type: 'authorization_code',
+        }),
+      });
+
+      const tokenData: any = await tokenRes.json();
+      if (!tokenRes.ok || !tokenData.id_token) {
+        return res.status(401).json({ error: tokenData.error_description || 'Failed to exchange authorization code' });
+      }
+
+      const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(tokenData.id_token)}`);
+      const tokenInfo: any = await verifyRes.json();
+      if (!verifyRes.ok || !tokenInfo.email) {
+        return res.status(401).json({ error: 'Failed to verify token info from Google' });
+      }
+
+      email = tokenInfo.email;
+      emailVerified = tokenInfo.email_verified === 'true' || tokenInfo.email_verified === true;
+      name = tokenInfo.name || '';
+      picture = tokenInfo.picture || '';
+    }
+
+    if (!emailVerified) {
+      return res.status(400).json({ error: 'Your Google email address must be verified' });
+    }
+
+    // Check if user already exists with this email
+    let user = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        profile: true,
+        settings: true,
+        ratings: true,
+      },
+    });
+
+    if (user) {
+      if (user.isBanned) {
+        return res.status(403).json({ error: 'This account has been suspended' });
+      }
+      // Update avatar if not yet set
+      if (picture && !user.profile?.avatarUrl) {
+        await prisma.profile.update({
+          where: { userId: user.id },
+          data: { avatarUrl: picture },
+        });
+      }
+    } else {
+      // Generate clean unique username from Google name or email
+      let baseUsername = (name || email.split('@')[0])
+        .replace(/[^a-zA-Z0-9_]/g, '')
+        .substring(0, 14) || 'Player';
+
+      let uniqueUsername = baseUsername;
+      let counter = 1;
+      while (await prisma.user.findUnique({ where: { username: uniqueUsername } })) {
+        uniqueUsername = `${baseUsername.substring(0, 11)}_${Math.floor(100 + Math.random() * 900)}`;
+        counter++;
+        if (counter > 10) break;
+      }
+
+      const dummyPasswordHash = await bcrypt.hash(`OAuth_${Date.now()}_${Math.random()}`, 10);
+
+      user = await prisma.user.create({
+        data: {
+          username: uniqueUsername,
+          email,
+          passwordHash: dummyPasswordHash,
+          role: 'user',
+          membershipTier: 'free',
+          profile: {
+            create: {
+              displayName: name || uniqueUsername,
+              avatarUrl: picture || `https://api.dicebear.com/7.x/bottts/svg?seed=${uniqueUsername}`,
+              country: 'US',
+            },
+          },
+          settings: {
+            create: {
+              boardTheme: 'green',
+              pieceTheme: 'neo',
+            },
+          },
+          ratings: {
+            create: {
+              bullet: 1200,
+              blitz: 1200,
+              rapid: 1200,
+              classical: 1200,
+              puzzles: 1200,
+            },
+          },
+        },
+        include: {
+          profile: true,
+          settings: true,
+          ratings: true,
+        },
+      });
+    }
+
+    const token = jwt.sign({ userId: user.id }, config.jwtSecret, {
+      expiresIn: config.jwtExpiresIn as any,
+    });
+
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        membershipTier: user.membershipTier,
+        profile: user.profile,
+        settings: user.settings,
+        ratings: user.ratings,
+      },
+    });
+  } catch (err: any) {
+    console.error('Google OAuth error:', err);
+    return res.status(500).json({ error: 'Failed to process Google authentication' });
+  }
+});
+
 export default router;

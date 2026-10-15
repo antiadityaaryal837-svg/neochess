@@ -9,6 +9,7 @@ import puzzlesRouter from '../apps/server/src/routes/puzzles.js';
 import lessonsRouter from '../apps/server/src/routes/lessons.js';
 import openingsRouter from '../apps/server/src/routes/openings.js';
 import tournamentsRouter from '../apps/server/src/routes/tournaments.js';
+import clubsRouter from '../apps/server/src/routes/clubs.js';
 
 const app = express();
 app.use(cors());
@@ -20,6 +21,7 @@ app.use('/api/puzzles', puzzlesRouter);
 app.use('/api/lessons', lessonsRouter);
 app.use('/api/openings', openingsRouter);
 app.use('/api/tournaments', tournamentsRouter);
+app.use('/api/clubs', clubsRouter);
 
 describe('Backend REST API Test Suite', () => {
   it('GET /api/openings returns authentic opening database', async () => {
@@ -56,7 +58,7 @@ describe('Backend REST API Test Suite', () => {
     const res = await request(app).get('/api/lessons');
     expect(res.status).toBe(200);
     expect(res.body.lessons.length).toBeGreaterThan(0);
-    expect(res.body.lessons[0].title).toBe('How the Pieces Move');
+    expect(res.body.lessons[0].title).toBe('How the Pieces Move & Capture');
   });
 
   it('POST /api/auth/guest generates zero-friction guest player token', async () => {
@@ -90,5 +92,26 @@ describe('Backend REST API Test Suite', () => {
     const res = await request(app).get('/api/tournaments');
     expect(res.status).toBe(200);
     expect(res.body.tournaments.length).toBeGreaterThan(0);
+  });
+
+  it('GET /api/clubs returns list of active clubs', async () => {
+    const res = await request(app).get('/api/clubs');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.clubs)).toBe(true);
+    expect(res.body.clubs.length).toBeGreaterThan(0);
+  });
+
+  it('GET /api/users/:username/achievements returns all 28 achievements', async () => {
+    const res = await request(app).get('/api/users/admin/achievements');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.achievements)).toBe(true);
+    expect(res.body.achievements.length).toBeGreaterThanOrEqual(28);
+  });
+
+  it('GET /api/puzzles/leaderboard returns puzzle ratings and rush leaderboards', async () => {
+    const res = await request(app).get('/api/puzzles/leaderboard');
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.ratingLeaderboard)).toBe(true);
+    expect(Array.isArray(res.body.rushLeaderboard)).toBe(true);
   });
 });

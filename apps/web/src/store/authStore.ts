@@ -7,7 +7,7 @@ export interface UserState {
   id: string;
   username: string;
   email: string;
-  role: 'user' | 'moderator' | 'admin';
+  role: 'user' | 'moderator' | 'admin' | 'superadmin';
   membershipTier: 'free' | 'gold' | 'platinum' | 'diamond';
   profile?: any;
   settings?: any;

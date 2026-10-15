@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { prisma } from '../db.js';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth.js';
 import { UpdateProfileSchema } from '@chess/shared';
+import { evaluateUserAchievements } from '../services/achievementService.js';
 
 const router = Router();
 
@@ -146,6 +147,21 @@ router.get('/:username', async (req: Request, res: Response) => {
       },
     });
 
+    // Evaluate and sync user achievements
+    await evaluateUserAchievements(user.id);
+
+    const userAchievements = await prisma.userAchievement.findMany({
+      where: { userId: user.id },
+    });
+    const unlockedMap = new Map(userAchievements.map((a) => [a.achievementCode, a.unlockedAt]));
+
+    const allAchievements = await prisma.achievement.findMany();
+    const achievementsShowcase = allAchievements.map((ach) => ({
+      ...ach,
+      unlocked: unlockedMap.has(ach.code),
+      unlockedAt: unlockedMap.get(ach.code) || null,
+    }));
+
     return res.json({
       user: {
         id: user.id,
@@ -162,12 +178,46 @@ router.get('/:username', async (req: Request, res: Response) => {
           draws,
           winRate,
         },
+        achievements: achievementsShowcase,
+        unlockedCount: userAchievements.length,
+        totalAchievementsCount: allAchievements.length,
         recentGames,
       },
     });
   } catch (err: any) {
     console.error('User profile lookup error:', err);
     return res.status(500).json({ error: 'Failed to load user profile' });
+  }
+});
+
+// GET /api/users/:username/achievements
+router.get('/:username/achievements', async (req: Request, res: Response) => {
+  try {
+    const { username } = req.params;
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user) return res.status(404).json({ error: 'User not found' });
+
+    await evaluateUserAchievements(user.id);
+
+    const userAchievements = await prisma.userAchievement.findMany({
+      where: { userId: user.id },
+    });
+    const unlockedMap = new Map(userAchievements.map((a) => [a.achievementCode, a.unlockedAt]));
+
+    const allAchievements = await prisma.achievement.findMany();
+    const list = allAchievements.map((ach) => ({
+      ...ach,
+      unlocked: unlockedMap.has(ach.code),
+      unlockedAt: unlockedMap.get(ach.code) || null,
+    }));
+
+    return res.json({
+      achievements: list,
+      unlockedCount: userAchievements.length,
+      totalCount: allAchievements.length,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to fetch achievements' });
   }
 });
 

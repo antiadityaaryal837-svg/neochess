@@ -40,7 +40,7 @@ export const App: React.FC = () => {
           <Sidebar />
 
           {/* Main Viewport */}
-          <main className="flex-1 overflow-y-auto min-h-screen">
+          <main className="flex-1 overflow-y-auto min-h-screen pb-20 md:pb-0">
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/play" element={<PlayPage />} />

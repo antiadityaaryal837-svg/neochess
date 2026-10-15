@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
-import { calculateAccuracy, classifyMove } from '@chess/chess';
+import { getStockfishEngine } from '@chess/chess';
 
 dotenv.config();
 
@@ -20,62 +20,54 @@ async function processPendingAnalyses() {
       take: 5,
     });
 
+    const sf = getStockfishEngine();
+
     for (const game of unanalyzedGames) {
       if (game.moves.length === 0) continue;
 
-      console.log(`[Worker] Analyzing game ${game.id} (${game.moves.length} moves)...`);
+      console.log(`[Worker] Analyzing game ${game.id} with Stockfish 19 WASM...`);
 
-      const whiteLosses: number[] = [];
-      const blackLosses: number[] = [];
-      const keyMoments: any[] = [];
+      const report = await sf.analyzeGame(
+        game.moves.map((m) => ({
+          id: m.id,
+          moveNumber: m.moveNumber,
+          color: m.color as 'w' | 'b',
+          san: m.san,
+          fen: m.fen,
+        })),
+        10
+      );
 
-      let previousEval = 0;
-      for (const move of game.moves) {
-        let moveEval = previousEval;
-        let classification = 'good';
-
-        if (move.san.includes('#')) {
-          classification = 'best';
-          moveEval = move.color === 'w' ? 1000 : -1000;
-        } else if (move.san.includes('+')) {
-          classification = 'excellent';
-          moveEval = move.color === 'w' ? previousEval + 25 : previousEval - 25;
-        } else if (move.san.includes('x')) {
-          classification = 'good';
-        }
-
-        const loss = Math.abs(moveEval - previousEval);
-        if (move.color === 'w') whiteLosses.push(loss);
-        else blackLosses.push(loss);
-
-        previousEval = moveEval;
-
-        await prisma.gameMove.update({
-          where: { id: move.id },
-          data: { classification, evalScore: moveEval },
-        });
-
-        if (classification === 'best' || classification === 'blunder' || classification === 'mistake') {
-          keyMoments.push({
-            moveNumber: move.moveNumber,
-            color: move.color,
-            san: move.san,
-            classification,
-            comment: `Key moment at move ${move.moveNumber}.`,
+      for (const item of report.moveAnalyses) {
+        const dbMove = game.moves.find(
+          (m) => m.moveNumber === item.moveNumber && m.color === item.color
+        );
+        if (dbMove) {
+          await prisma.gameMove.update({
+            where: { id: dbMove.id },
+            data: {
+              classification: item.classification,
+              evalScore: item.whiteEval,
+              bestMove: item.bestMoveSan || item.bestMove,
+            },
           });
         }
       }
 
-      const whiteAccuracy = calculateAccuracy(whiteLosses);
-      const blackAccuracy = calculateAccuracy(blackLosses);
-
-      await prisma.gameAnalysis.create({
-        data: {
+      await prisma.gameAnalysis.upsert({
+        where: { gameId: game.id },
+        create: {
           gameId: game.id,
-          whiteAccuracy: Math.max(70, whiteAccuracy),
-          blackAccuracy: Math.max(70, blackAccuracy),
-          summary: `Asynchronous worker review completed with deep ply analysis.`,
-          keyMomentsJson: JSON.stringify(keyMoments),
+          whiteAccuracy: report.whiteAccuracy,
+          blackAccuracy: report.blackAccuracy,
+          summary: report.summary,
+          keyMomentsJson: JSON.stringify(report.keyMoments),
+        },
+        update: {
+          whiteAccuracy: report.whiteAccuracy,
+          blackAccuracy: report.blackAccuracy,
+          summary: report.summary,
+          keyMomentsJson: JSON.stringify(report.keyMoments),
         },
       });
 

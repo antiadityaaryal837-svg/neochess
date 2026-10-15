@@ -102,6 +102,8 @@ export const useGameStore = create<GameStore>((set, get) => {
         // Sound effect based on move
         if (data.inCheck) {
           sounds.playCheck();
+        } else if (data.move.san.includes('=')) {
+          sounds.playPromotion();
         } else if (data.move.san.includes('x')) {
           sounds.playCapture();
         } else if (data.move.san.includes('O-O')) {
@@ -150,14 +152,21 @@ export const useGameStore = create<GameStore>((set, get) => {
         whiteRatingDelta?: number;
         blackRatingDelta?: number;
       }) => {
-        sounds.playGameEnd();
-
-        // Celebration confetti if player won!
-        confetti({
-          particleCount: 80,
-          spread: 70,
-          origin: { y: 0.6 },
-        });
+        const myOrientation = get().boardOrientation;
+        const myColor = myOrientation === 'white' ? 'w' : 'b';
+        if (data.winner === myColor) {
+          sounds.playVictory();
+          // Celebration confetti if player won!
+          confetti({
+            particleCount: 80,
+            spread: 70,
+            origin: { y: 0.6 },
+          });
+        } else if (data.winner && data.winner !== myColor) {
+          sounds.playDefeat();
+        } else {
+          sounds.playDraw();
+        }
 
         const currentGame = get().game;
         if (currentGame) {
@@ -195,6 +204,16 @@ export const useGameStore = create<GameStore>((set, get) => {
           isSearchingMatch: false,
           matchQueueStatus: null,
           boardOrientation: data.color,
+        });
+        get().joinGame(data.gameId);
+      });
+
+      socket.on('game:matched', (data: { gameId: string; color: 'w' | 'b' | 'white' | 'black' }) => {
+        const orientation = data.color === 'w' || data.color === 'white' ? 'white' : 'black';
+        set({
+          isSearchingMatch: false,
+          matchQueueStatus: null,
+          boardOrientation: orientation,
         });
         get().joinGame(data.gameId);
       });

@@ -105,16 +105,16 @@ describe('Rating System & Fair Play Mathematics', () => {
 
 describe('Stockfish Evaluation & Move Classification', () => {
   it('classifies top engine move as best or brilliant', () => {
-    expect(classifyMove(100, 150, true, true)).toBe('brilliant');
-    expect(classifyMove(100, 100, true, false)).toBe('best');
+    expect(classifyMove(100, 150, true, true).classification).toBe('brilliant');
+    expect(classifyMove(100, 100, true, false).classification).toBe('best');
   });
 
   it('detects inaccuracies, mistakes and blunders by centipawn loss', () => {
-    expect(classifyMove(200, 185, false)).toBe('excellent');
-    expect(classifyMove(200, 160, false)).toBe('good');
-    expect(classifyMove(200, 80, false)).toBe('inaccuracy');
-    expect(classifyMove(200, -50, false)).toBe('mistake');
-    expect(classifyMove(200, -250, false)).toBe('blunder');
+    expect(classifyMove(200, 185, false).classification).toBe('great');
+    expect(classifyMove(200, 160, false).classification).toBe('good');
+    expect(classifyMove(200, 80, false).classification).toBe('inaccuracy');
+    expect(classifyMove(200, -50, false).classification).toBe('mistake');
+    expect(classifyMove(200, -250, false).classification).toBe('blunder');
   });
 
   it('computes accuracy percentage within 0-100 range', () => {

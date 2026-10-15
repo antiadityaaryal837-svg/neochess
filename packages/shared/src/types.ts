@@ -192,10 +192,12 @@ export interface BotPersona {
   name: string;
   avatar: string;
   rating: number;
-  category: 'beginner' | 'intermediate' | 'advanced' | 'master';
+  category: 'beginner' | 'intermediate' | 'advanced' | 'master' | 'grandmaster';
   depth: number;
   skillLevel: number; // 0 to 20
   blunderPercent: number;
+  thinkingMs?: number;
+  uciElo?: number;
   bio: string;
   quote: string;
 }

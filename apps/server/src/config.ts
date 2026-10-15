@@ -11,4 +11,6 @@ export const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   isProduction: process.env.NODE_ENV === 'production',
+  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
 };

@@ -16,11 +16,18 @@ import openingsRouter from './routes/openings.js';
 import socialRouter from './routes/social.js';
 import tournamentsRouter from './routes/tournaments.js';
 import adminRouter from './routes/admin.js';
+import analysisRouter from './routes/analysis.js';
+import clubsRouter from './routes/clubs.js';
+import { ensureAchievementsSeeded } from './services/achievementService.js';
+
+// Auto-seed all system achievements on startup
+ensureAchievementsSeeded().catch((err) => console.error('Failed to seed achievements:', err));
 
 // Import Socket Game Handlers
 import { setupSocketGameHandlers } from './socket/gameHandler.js';
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // Socket.IO Setup
@@ -40,11 +47,14 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// API Rate limiting
+// API Rate limiting (configured safely for proxies and tunnels)
 const limiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: 1000,
   message: { error: 'Too many requests, please slow down' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  validate: { xForwardedForHeader: false },
 });
 app.use('/api', limiter);
 
@@ -58,6 +68,34 @@ app.use('/api/openings', openingsRouter);
 app.use('/api/social', socialRouter);
 app.use('/api/tournaments', tournamentsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/analysis', analysisRouter);
+app.use('/api/clubs', clubsRouter);
+
+import os from 'os';
+
+function getLanIpAddress(): string {
+  const interfaces = os.networkInterfaces();
+  let wifiIp = '';
+  let ethernetIp = '';
+  let fallbackIp = '';
+
+  for (const name of Object.keys(interfaces)) {
+    for (const net of interfaces[name] || []) {
+      if (net.family === 'IPv4' && !net.internal) {
+        const lowerName = name.toLowerCase();
+        if (lowerName.includes('wi-fi') || lowerName.includes('wireless') || lowerName.includes('wlan')) {
+          wifiIp = net.address;
+        } else if (lowerName.includes('ethernet') && !lowerName.includes('vethernet') && !lowerName.includes('virtual')) {
+          ethernetIp = net.address;
+        } else if (!fallbackIp && !lowerName.includes('vethernet') && !lowerName.includes('virtual') && !lowerName.includes('default switch')) {
+          fallbackIp = net.address;
+        }
+      }
+    }
+  }
+
+  return wifiIp || ethernetIp || fallbackIp || '127.0.0.1';
+}
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
@@ -69,8 +107,22 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
-// Start server
-server.listen(config.port, () => {
+// Network LAN Discovery endpoint
+app.get('/api/network-info', (_req, res) => {
+  const lanIp = getLanIpAddress();
+  res.json({
+    lanIp,
+    webUrl: `http://${lanIp}:5173`,
+    apiUrl: `http://${lanIp}:${config.port}`,
+    hostname: os.hostname(),
+    isAccessibleOnLan: true,
+  });
+});
+
+// Start server on 0.0.0.0 for LAN access
+server.listen(config.port, '0.0.0.0', () => {
+  const lanIp = getLanIpAddress();
   console.log(`🚀 NeoChess Authoritative Server running on http://localhost:${config.port}`);
-  console.log(`📡 Socket.IO real-time multiplayer engine ready`);
+  console.log(`🌐 Local Network Access (Wi-Fi/LAN): http://${lanIp}:${config.port}`);
+  console.log(`📡 Socket.IO real-time multiplayer engine ready on 0.0.0.0:${config.port}`);
 });

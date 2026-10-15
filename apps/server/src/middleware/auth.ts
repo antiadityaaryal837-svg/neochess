@@ -91,17 +91,31 @@ export async function optionalAuthenticateToken(
   next();
 }
 
-export function requireRole(role: 'admin' | 'moderator') {
+export function requireRole(role: 'superadmin' | 'admin' | 'moderator' | ('superadmin' | 'admin' | 'moderator')[]) {
+  const allowed = Array.isArray(role) ? role : [role];
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
     }
-    if (role === 'admin' && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin privileges required' });
+    const currentRole = req.user.role || 'user';
+
+    // Super Admin has unrestricted access to all operations
+    if (currentRole === 'superadmin') {
+      return next();
     }
-    if (role === 'moderator' && req.user.role !== 'admin' && req.user.role !== 'moderator') {
-      return res.status(403).json({ error: 'Moderator privileges required' });
+
+    if (allowed.includes(currentRole as any)) {
+      return next();
     }
-    next();
+
+    // Admin has access to moderator routes
+    if (currentRole === 'admin' && allowed.includes('moderator')) {
+      return next();
+    }
+
+    return res.status(403).json({
+      error: `Access denied. Requires one of: ${allowed.join(', ')}`,
+      currentRole,
+    });
   };
 }

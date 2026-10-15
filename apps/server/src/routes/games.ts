@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { prisma } from '../db.js';
 import { authenticateToken, AuthenticatedRequest, optionalAuthenticateToken } from '../middleware/auth.js';
 import { CreateGameSchema, STANDARD_TIME_CONTROLS, BOT_PERSONAS } from '@chess/shared';
-import { ChessGameEngine, classifyMove, calculateAccuracy } from '@chess/chess';
+import { ChessGameEngine, getStockfishEngine } from '@chess/chess';
 
 const router = Router();
 
@@ -178,80 +178,69 @@ router.post('/:id/analyze', authenticateToken, async (req: AuthenticatedRequest,
       return res.status(404).json({ error: 'Game not found' });
     }
 
-    if (game.analysis) {
-      return res.json({ analysis: game.analysis });
+    // Reopen previous game reviews without recalculating everything unless forced
+    if (game.analysis && req.query.force !== 'true') {
+      return res.json({ analysis: game.analysis, moves: game.moves });
     }
 
-    // Run game analysis calculation
-    const whiteLosses: number[] = [];
-    const blackLosses: number[] = [];
-    const keyMoments: any[] = [];
+    if (!game.moves || game.moves.length === 0) {
+      return res.status(400).json({ error: 'Cannot analyze a game with no moves' });
+    }
 
-    // Analyze each move
-    let previousEval = 0; // neutral
-    for (const move of game.moves) {
-      // Centipawn delta estimation based on move characteristics and check state
-      let moveEvalScore = 0;
-      let classification = 'good';
+    // Run real Stockfish WASM engine analysis
+    const sf = getStockfishEngine();
+    const report = await sf.analyzeGame(
+      game.moves.map((m) => ({
+        id: m.id,
+        moveNumber: m.moveNumber,
+        color: m.color as 'w' | 'b',
+        san: m.san,
+        fen: m.fen,
+      })),
+      10
+    );
 
-      // Detect captures, checks, and tactical shifts
-      if (move.san.includes('#')) {
-        classification = 'best';
-        moveEvalScore = move.color === 'w' ? 1000 : -1000;
-      } else if (move.san.includes('+')) {
-        classification = 'excellent';
-        moveEvalScore = move.color === 'w' ? previousEval + 30 : previousEval - 30;
-      } else if (move.san.includes('x')) {
-        classification = 'good';
-        moveEvalScore = previousEval;
-      } else {
-        classification = 'good';
-        moveEvalScore = previousEval;
-      }
-
-      const loss = Math.abs(moveEvalScore - previousEval);
-      if (move.color === 'w') {
-        whiteLosses.push(loss);
-      } else {
-        blackLosses.push(loss);
-      }
-
-      previousEval = moveEvalScore;
-
-      // Update move with classification
-      await prisma.gameMove.update({
-        where: { id: move.id },
-        data: {
-          classification,
-          evalScore: moveEvalScore,
-        },
-      });
-
-      if (classification === 'blunder' || classification === 'mistake' || classification === 'best') {
-        keyMoments.push({
-          moveNumber: move.moveNumber,
-          color: move.color,
-          san: move.san,
-          classification,
-          comment: `Move ${move.moveNumber}. ${move.san} played.`,
+    // Update each move in database with real engine classification, eval, and recommended best move
+    for (const item of report.moveAnalyses) {
+      const dbMove = game.moves.find(
+        (m) => m.moveNumber === item.moveNumber && m.color === item.color
+      );
+      if (dbMove) {
+        await prisma.gameMove.update({
+          where: { id: dbMove.id },
+          data: {
+            classification: item.classification,
+            evalScore: item.whiteEval,
+            bestMove: item.bestMoveSan || item.bestMove,
+          },
         });
       }
     }
 
-    const whiteAccuracy = calculateAccuracy(whiteLosses);
-    const blackAccuracy = calculateAccuracy(blackLosses);
-
-    const analysis = await prisma.gameAnalysis.create({
-      data: {
+    // Upsert analysis record
+    const analysis = await prisma.gameAnalysis.upsert({
+      where: { gameId: game.id },
+      create: {
         gameId: game.id,
-        whiteAccuracy: Math.max(65, whiteAccuracy),
-        blackAccuracy: Math.max(65, blackAccuracy),
-        summary: `Complete game review finished. White achieved ${Math.max(65, whiteAccuracy)}% accuracy and Black played with ${Math.max(65, blackAccuracy)}% accuracy.`,
-        keyMomentsJson: JSON.stringify(keyMoments),
+        whiteAccuracy: report.whiteAccuracy,
+        blackAccuracy: report.blackAccuracy,
+        summary: report.summary,
+        keyMomentsJson: JSON.stringify(report.keyMoments),
+      },
+      update: {
+        whiteAccuracy: report.whiteAccuracy,
+        blackAccuracy: report.blackAccuracy,
+        summary: report.summary,
+        keyMomentsJson: JSON.stringify(report.keyMoments),
       },
     });
 
-    return res.json({ analysis });
+    const updatedMoves = await prisma.gameMove.findMany({
+      where: { gameId: game.id },
+      orderBy: { moveNumber: 'asc' },
+    });
+
+    return res.json({ analysis, moves: updatedMoves, report });
   } catch (err: any) {
     console.error('Game analysis error:', err);
     return res.status(500).json({ error: 'Failed to analyze game' });

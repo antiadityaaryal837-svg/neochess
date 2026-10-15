@@ -40,3 +40,8 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+
+# Binaries & Downloads
+bin/
+*.exe
+

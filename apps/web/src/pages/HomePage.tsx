@@ -13,6 +13,8 @@ import {
   TrendingUp,
   Award,
   Loader2,
+  Users,
+  Wifi,
 } from 'lucide-react';
 import { useGameStore } from '../store/gameStore.js';
 import { useAuthStore } from '../store/authStore.js';
@@ -108,42 +110,88 @@ export const HomePage: React.FC = () => {
               ))}
             </div>
 
+            {/* Permanent Multiplayer & LAN Lobby Entry Banner */}
+            <div className="p-4 rounded-xl bg-gradient-to-r from-[#21201d] via-[#262522] to-[#1e1d1a] border border-[#3c3934] flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-[#81b64c]/20 text-[#81b64c] border border-[#81b64c]/30 flex items-center justify-center shrink-0">
+                  <Wifi size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-white text-base">Multiplayer Lobby (LAN & Online)</h3>
+                    <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#81b64c]/20 text-[#81b64c] border border-[#81b64c]/40">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#81b64c] animate-pulse" />
+                      Live Lobby
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400">
+                    Challenge other players on your local Wi-Fi or across the internet directly. No bot game required!
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => navigate('/play?view=lobby')}
+                className="w-full sm:w-auto px-5 py-2.5 bg-[#81b64c] hover:bg-[#95c65a] text-white text-xs font-bold rounded-xl shadow-glow-green transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+              >
+                <Users size={16} />
+                <span>Open Player Lobby</span>
+              </button>
+            </div>
+
             {/* Quick Action Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 border-t border-[#312e2b]">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-[#312e2b]">
+              <button
+                onClick={() => navigate('/play?view=lobby')}
+                className="flex items-center justify-between p-3.5 rounded-xl bg-[#2e2c28] hover:bg-[#383531] border border-[#3c3934] transition-all group"
+              >
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-[#81b64c]/20 text-[#81b64c] flex items-center justify-center shrink-0">
+                    <Users size={18} />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs font-bold text-white group-hover:text-[#81b64c] transition-colors">
+                      Player Lobby
+                    </div>
+                    <div className="text-[11px] text-gray-400">Wi-Fi & Online</div>
+                  </div>
+                </div>
+                <ArrowRight size={15} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
+              </button>
+
               <button
                 onClick={() => navigate('/bots')}
                 className="flex items-center justify-between p-3.5 rounded-xl bg-[#2e2c28] hover:bg-[#383531] border border-[#3c3934] transition-all group"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-                    <Bot size={22} />
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center shrink-0">
+                    <Bot size={18} />
                   </div>
                   <div className="text-left">
-                    <div className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">
+                    <div className="text-xs font-bold text-white group-hover:text-indigo-400 transition-colors">
                       Play Computer
                     </div>
-                    <div className="text-xs text-gray-400">Challenge adaptive bots from 400 to 3200</div>
+                    <div className="text-[11px] text-gray-400">Bots 400 to 3000+</div>
                   </div>
                 </div>
-                <ArrowRight size={18} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight size={15} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
               </button>
 
               <button
                 onClick={() => navigate('/analysis')}
                 className="flex items-center justify-between p-3.5 rounded-xl bg-[#2e2c28] hover:bg-[#383531] border border-[#3c3934] transition-all group"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                    <GraduationCap size={22} />
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+                    <GraduationCap size={18} />
                   </div>
                   <div className="text-left">
-                    <div className="text-sm font-bold text-white group-hover:text-emerald-400 transition-colors">
+                    <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
                       Analysis Board
                     </div>
-                    <div className="text-xs text-gray-400">Deep Stockfish engine evaluation</div>
+                    <div className="text-[11px] text-gray-400">Stockfish Engine</div>
                   </div>
                 </div>
-                <ArrowRight size={18} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight size={15} className="text-gray-400 group-hover:translate-x-1 transition-transform" />
               </button>
             </div>
           </div>
